@@ -1,0 +1,1 @@
+This project contains a collection of scripts to set automatic backups for the config files. Place both scripts in a directory in your tftp server and transfer UPSSetup.xsf to the switch to run the setup. Each time the resulting UPM profile runs it will download the backup script so it has a known good copy.
