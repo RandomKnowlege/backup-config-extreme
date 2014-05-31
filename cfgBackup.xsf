@@ -1,0 +1,77 @@
+configure cli mode scripting abort-on-error
+if ($VAREXISTS(CLI.OUT) != 0) then 
+del var CLI.OUT 
+endif
+if ($VAREXISTS(vr) != 0) then 
+del var vr 
+endif
+if ($VAREXISTS(config) != 0) then 
+del var config 
+endif
+if ($VAREXISTS(tftproot) != 0) then 
+del var tftproot 
+endif
+if ($VAREXISTS(seconds) != 0) then 
+del var seconds 
+endif
+if ($VAREXISTS(date) != 0) then 
+del var date 
+endif
+if ($VAREXISTS(x) != 0) then 
+del var x 
+endif
+if ($VAREXISTS(y) != 0) then 
+del var y 
+endif
+if ($VAREXISTS(sname) != 0) then 
+del var sname 
+endif
+if ($VAREXISTS(filename) != 0) then 
+del var filename 
+endif
+if ($VAREXISTS(input) != 0) then 
+del var input 
+endif
+if ($VAREXISTS(branch) != 0) then 
+del var branch 
+endif
+if ($VAREXISTS(pname) != 0) then 
+del var pname 
+endif
+if ($VAREXISTS(tftpip) != 0) then 
+del var tftpip 
+endif
+set var CLI.OUT 0			#declare CLI.OUT to null to accept output from commands
+set var tftpip "192.168.1.2"		#ip address of the tftp server
+set var tftproot Extreme	#set the root path for the tftp server
+set var vr vr-default		#set the correct virtual router to process the tftp commands
+set var seconds $TCL(clock seconds)	 	#get the current time
+set var date $TCL(clock format $seconds -format {%Y-%m-%d})		#and convert to something readable
+set var filename default.cfg	#create a placeholder for the destination filename
+show switch						#call show switch in order to get the switch and active config file names
+set var input $TCL(split ${CLI.OUT} "\n")			#split the output of show switch into a list
+set var x $TCL(lsearch -glob $input "*SysName*")	#find the line with the system name
+set var x $TCL(lindex $input $x)					#get the index number of the line
+set var x $TCL(split $x " ")						#split the line into a list (space delimited)
+set var sname $TCL(lindex ${x} 10)					#find the last index and assign the last 10 
+													#non-space characters to $sname
+set var x $TCL(lsearch -glob $input "*Config Selected*")	#find the line with the config selected field
+set var x $TCL(lindex $input $x)							#get the index number of the line
+set var x $TCL(split $x " ")								#split the line into a list (space delimited)
+set var y $TCL(lsearch -glob $x "*.cfg*")					#find the list index with .cfg in it
+set var conf $TCL(lindex ${x} ${y})				#assign the index of line x ending in .cfg to $conf
+set var filename $TCL(string replace $filename 0 6 $sname)	#replace "default" in $filename with the switch name
+set var pname $tftproot/$sname/$date-$filename		#set the destination path for the tftp command
+save configuration									#save the current configuration in case any pending 
+													#changes were not committed to memory
+tftp put $tftpip vr $vr $conf $pname			#send the cfg file to the tftp server
+
+
+#show var tftproot
+#show var vr
+#show var seconds
+#show var date
+#show var sname
+#show var conf
+#show var filename
+#show var pname

@@ -1,0 +1,75 @@
+configure cli mode scripting abort-on-error
+
+#check each of the variable names used in this program to make sure they are not
+#already initialized from a prior run. If they are, delete them.
+
+if ($VAREXISTS(CLI.OUT) != 0) then 
+	del var CLI.OUT 
+endif
+if ($VAREXISTS(cntrl) != 0) then 
+	del var cntrl 
+endif
+if ($VAREXISTS(base_list) != 0) then 
+	del var base_list 
+endif
+if ($VAREXISTS(xsfExists) != 0) then 
+	del var xsfExists 
+endifif 
+if ($VAREXISTS(xsfFileName) != 0) then 
+	del var xsfFileName 
+endif
+
+set var vr "VR-Default"				#set the vrouter you are using to connect to the tftp server
+set var tftpip "192.168.1.2"		#ip address of the tftp server
+
+#Create a list of files stored on the switch and store them in $base_list
+set var CLI.OUT 0
+ls
+set var cntrl 1								#used to control the while loop below
+set var base_list $TCL(join ${CLI.OUT})		#assign the values stored in CLI.OUT to $base_list
+set var base_list $TCL(lsort $base_list)	#sort the list in ascending order
+set var base_list $TCL(split $base_list)	#split it using space as a delimiter
+delete var "CLI.OUT"						#delete the CLI.OUT variable. It is just good practice.
+
+#go through each item in the list and delete old support files to make sure the correct version is in use
+while ($cntrl == 1) do
+	set var xsfExists $TCL(lsearch -glob $base_list *xsf*)  #check for any .xsf files in base_list
+	set var xsfFileName $TCL(lindex $base_list $xsfExists)	#get the file name of the first .xsf file in the list
+	set var base_list $TCL(lreplace $base_list $xsfExists $xsfExists deleted)	#delete the .xsf file saved above
+	if ($MATCH($xsfFileName, "UPMSetup.xsf") != 0) then		#as long as the .xsf file isn't this one
+		rm $xsfFileName										#delete it
+	endif
+	set var cntrl $TCL(regexp -nocase {xsf} $base_list)		#if there is another .xsf go again
+endwhile
+
+#delete all existing upm profiles and triggers pertaining to this job
+configure cli mode scripting ignore-error
+delete upm profile "backup-config"
+delete upm timer "backup-config-timer"
+#delete log target upm backup-config
+delete log filter "AAA_Login"
+configure cli mode scripting abort-on-error
+
+#get the script used in backup-config from the tftp server
+tftp $tftpip -v $vr -g -l cfgBackup.xsf -r /extreme/cfgBackup.xsf
+
+#configure the upm profile that will be run by the triggers above
+
+create upm profile backup-config		#create the upm profile and instruct it to retrieve cfgBackup.xsf
+
+	load script cfgBackup
+.
+configure upm profile backup-config maximum execution-time 240
+
+#create a scheduled backup
+create upm timer backup-config-timer		#create a timer for the backup-config upm
+configure upm timer backup-config-timer profile backup-config		#assign it to backup-config upm
+configure upm timer backup-config-timer after 300 every 86400		#set it to run after a reboot and the every 24 hours
+enable upm profile backup-config			#enable the timer
+
+#create a triggered backup
+create log filter AAA_Login									#create a filter
+configure log filter AAA_Login add events AAA.authPass 		#set it to find successful logins
+create log target upm backup-config							#create an event trigger and assign it to backup-config upm
+enable log target upm backup-config							#enable the trigger
+configure log target upm backup-config filter AAA_Login severity Info	#set the trigger to fire on successful login
